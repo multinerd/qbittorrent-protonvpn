@@ -7,7 +7,7 @@ to allow qBittorrent to liston on a port via [Proton VPN](https://protonvpn.com/
 
 Just define these environnement variables to your qBittorrent container: 
 
-* `DOCKER_MODS=ghcr.io/multinerd/qbittorrent-protonvpn:main` to enable this mod
+* `DOCKER_MODS=multinerd/docker-mods-qbittorrent-protonvpn-natpmp:latest:main` to enable this mod
 
 ## License
 
