@@ -28,8 +28,6 @@ fn main() -> Result<()> {
         }
         mr = mr_;
     }
-
-    Ok(())
 }
 
 fn update_qbittorrent(client: &mut Client, port: u16) -> Result<()> {
