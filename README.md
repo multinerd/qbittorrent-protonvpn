@@ -1,13 +1,13 @@
-# NATPMP Mod for ProtonVPN and Transmission
+# NATPMP Mod for ProtonVPN and qBittorrent
 
-A Docker mod for [linuxserver/docker-transmission](https://github.com/linuxserver/docker-transmission)
-to allow Transmission to liston on a port via [Proton VPN](https://protonvpn.com/).
+A Docker mod for [linuxserver/docker-qbittorrent](https://github.com/linuxserver/docker-qbittorrent)
+to allow qBittorrent to liston on a port via [Proton VPN](https://protonvpn.com/).
 
 ## How to use
 
-Just define these environnement variables to your Transmission container: 
+Just define these environnement variables to your qBittorrent container: 
 
-* `DOCKER_MODS=ghcr.io/sdwilsh/transmission-protonvpn:main` to enable this mod
+* `DOCKER_MODS=ghcr.io/multinerd/qbittorrent-protonvpn:main` to enable this mod
 
 ## License
 

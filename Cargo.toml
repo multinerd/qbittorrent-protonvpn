@@ -2,7 +2,7 @@
 authors = ["FuseTim <fusetim@gmx.com>", "sdwilsh@pm.me"]
 edition = "2021"
 license = "MIT"
-name = "transmission-protonvpn"
+name = "qbittorrent-protonvpn"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -10,3 +10,4 @@ version = "0.1.0"
 [dependencies]
 natpmp = "0.5.0"
 anyhow = "*"
+reqwest = { version = "0.11", default_features = false, features = ["blocking"] }

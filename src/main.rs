@@ -1,19 +1,19 @@
 use anyhow::{anyhow, bail, Result};
 use natpmp::*;
-use std::process::Command;
-use std::process::Output;
+use reqwest::blocking::Client;
+use reqwest::Url;
 use std::thread;
 use std::time::Duration;
 
 fn main() -> Result<()> {
     let gateway = std::env::var("NATPMP_GATEWAY_IP").unwrap_or("10.2.0.1".to_owned());
-    let mut n =
-        Natpmp::new_with(gateway.parse().unwrap()).expect("Parsing gateway address failed!");
+    let mut n = Natpmp::new_with(gateway.parse().unwrap()).expect("Parsing gateway address failed!");
+    let mut client = Client::default();
 
     let _ = query_gateway(&mut n).expect("Quering Public IP failed!");
 
     let mut mr = query_available_port(&mut n).expect("Quering a Port Mapping failed!");
-    update_transmission(mr.public_port()).expect("Failed to update Transmission.");
+    update_qbittorrent(&mut client, mr.public_port()).expect("Failed to update qBittorrent.");
 
     loop {
         thread::sleep(*mr.lifetime() / 2); //Renew at half lifetime
@@ -21,18 +21,20 @@ fn main() -> Result<()> {
             .or(query_available_port(&mut n))
             .expect("Every renewal method failed!");
         if mr.public_port() != mr_.public_port() {
-            println!("Port has changed, setting incoming port on Transmission...");
-            update_transmission(mr.public_port()).expect("Failed to update Transmission.");
+            println!("Port has changed, setting incoming port on QBittorrent...");
+            update_qbittorrent(&mut client, mr.public_port()).expect("Failed to update QBittorrent.");
         }
         mr = mr_;
     }
+    Ok(())
 }
 
-fn update_transmission(port: u16) -> Result<Output, std::io::Error> {
-    Command::new("transmission-remote")
-        .arg("--port")
-        .arg(port.to_string())
-        .output()
+fn update_qbittorrent(client: &mut Client, port: u16) -> Result<()> {
+    client
+    .post(Url::parse("http://127.0.0.1:8080/api/v2/app/setPreferences").unwrap())
+    .form(&[("json", &format!(r#"{{"listen_port":{}}}"#, port))])
+    .send()?
+    .error_for_status()?;
 }
 
 fn query_gateway(n: &mut Natpmp) -> Result<GatewayResponse> {
