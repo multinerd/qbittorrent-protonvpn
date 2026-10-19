@@ -69,7 +69,7 @@ fn main() -> Result<()> {
         query_gateway(&mut natpmp)
     });
 
-    let mut mappings = retry_forever("initial port mapping", || {
+    let mut mappings = retry_forever("Initial port mapping", || {
         query_mappings(&mut natpmp, None)
     });
 
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
                 "Renewing TCP/UDP mappings; current external port: {previous_port}"
             );
 
-            mappings = retry_forever("port mapping renewal", || {
+            mappings = retry_forever("Port mapping renewal", || {
                 query_mappings(&mut natpmp, Some(&mappings))
             });
 
@@ -123,10 +123,43 @@ fn main() -> Result<()> {
 
             if previous_port != new_port {
                 warn!("External port changed: {previous_port} -> {new_port}");
-                configured_port = None;
-                next_webui_attempt = Instant::now();
             } else {
                 info!("Port mapping renewed successfully on port {new_port}");
+            }
+
+            // Always verify qBittorrent after a successful NAT-PMP renewal.
+            match client.get_listen_port() {
+                Ok(actual_port) if actual_port == new_port => {
+                    info!(
+                        "Post-renewal verification passed: \
+qBittorrent listen_port={actual_port}"
+                    );
+
+                    configured_port = Some(new_port);
+                    webui_retry_delay = WEBUI_RETRY_INITIAL_DELAY;
+                }
+
+                Ok(actual_port) => {
+                    warn!(
+                        "Post-renewal port mismatch: NAT-PMP={new_port}, \
+qBittorrent={actual_port}. Forcing an update."
+                    );
+
+                    configured_port = None;
+                    next_webui_attempt = Instant::now();
+                }
+
+                Err(e) => {
+                    error!(
+                        "Could not verify qBittorrent listening port after renewal: {e:#}"
+                    );
+                    warn!(
+                        "Forcing a qBittorrent listening-port update to {new_port}"
+                    );
+
+                    configured_port = None;
+                    next_webui_attempt = Instant::now();
+                }
             }
 
             // Schedule from the renewal completion time.
@@ -292,6 +325,78 @@ check credentials and WebUI IP ban settings"
         Ok(())
     }
 
+    fn get_listen_port(&mut self) -> Result<u16> {
+        if self.authentication_failed {
+            bail!(
+                "qBittorrent authentication previously failed; \
+verify credentials and restart the service"
+            );
+        }
+
+        if self.username.is_some() && self.sid.is_none() {
+            self.login()?;
+        }
+
+        for attempt in 0..2 {
+            let url = self.api_url("api/v2/app/preferences")?;
+
+            let response = self
+            .with_headers(self.client.get(url))
+            .send()
+            .context("Failed to request qBittorrent preferences")?;
+
+            if matches!(
+                response.status(),
+                        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+            ) && self.username.is_some()
+            && attempt == 0
+            {
+                warn!("qBittorrent session expired; re-authenticating");
+
+                self.sid = None;
+                self.login()?;
+                continue;
+            }
+
+            let response = response
+            .error_for_status()
+            .context("qBittorrent rejected the preferences request")?;
+
+            let preferences = response
+            .text()
+            .context("Failed to read qBittorrent preferences")?;
+
+            let compact: String = preferences
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+
+            let marker = r#""listen_port":"#;
+
+            let value = compact
+            .split_once(marker)
+            .map(|(_, value)| value)
+            .ok_or_else(|| {
+                anyhow!(
+                    "qBittorrent preferences response has no listen_port field"
+                )
+            })?;
+
+            let digits: String = value
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+
+            let port = digits
+            .parse::<u16>()
+            .context("Invalid listen_port in qBittorrent preferences")?;
+
+            return Ok(port);
+        }
+
+        bail!("Failed to read qBittorrent listening port after re-authentication")
+    }
+
     fn set_listen_port(&mut self, port: u16) -> Result<()> {
         if self.authentication_failed {
             bail!(
@@ -343,35 +448,17 @@ verify credentials and restart the service"
         bail!("Failed to update listening port after re-authentication")
     }
 
-    fn verify_listen_port(&self, port: u16) -> Result<()> {
-        let url = self.api_url("api/v2/app/preferences")?;
+    fn verify_listen_port(&mut self, expected_port: u16) -> Result<()> {
+        let actual_port = self.get_listen_port()?;
 
-        let response = self
-        .with_headers(self.client.get(url))
-        .send()
-        .context("Failed to request qBittorrent preferences")?
-        .error_for_status()
-        .context("qBittorrent rejected the preferences request")?;
-
-        let preferences = response
-        .text()
-        .context("Failed to read qBittorrent preferences")?;
-
-        let compact: String = preferences
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .collect();
-
-        let expected = format!(r#""listen_port":{port}"#);
-
-        if !compact.contains(&expected) {
+        if actual_port != expected_port {
             bail!(
-                "qBittorrent did not confirm listen_port={port}; \
-check WebUI response and permissions"
+                "qBittorrent listening port mismatch: \
+expected {expected_port}, actual {actual_port}"
             );
         }
 
-        info!("Verified qBittorrent listening port: {port}");
+        info!("Verified qBittorrent listening port: {actual_port}");
 
         Ok(())
     }
