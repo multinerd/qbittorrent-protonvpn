@@ -1,0 +1,56 @@
+services:
+  gluetun:
+    container_name: qbittorrent-gluetun
+    image: qmcgaw/gluetun
+    restart: unless-stopped
+    environment:
+      TZ: America/New_York
+      VPN_SERVICE_PROVIDER: protonvpn
+      VPN_TYPE: wireguard
+
+      # Keep Gluetun's native forwarding enabled so its VPN firewall allows the forwarded port.
+      # The Docker Mod will update qBittorrent's listening port, so the UP_COMMAND is omitted.
+      VPN_PORT_FORWARDING: "on"
+      VPN_PORT_FORWARDING_PROVIDER: protonvpn
+
+      # Supply this in your shell before running Compose; don't commit your real private key.
+      WIREGUARD_PRIVATE_KEY: "${WIREGUARD_PRIVATE_KEY:?Set WIREGUARD_PRIVATE_KEY in your shell}"
+
+      HTTPPROXY: "off"
+      SHADOWSOCKS: "off"
+
+      # Optional: allow traffic to a LAN subnet through Gluetun's firewall.
+      # FIREWALL_OUTBOUND_SUBNETS: "10.2.0.2/32"
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "6969:6969/tcp" # qBittorrent WebUI
+    volumes:
+      - ./data/gluetun:/gluetun
+
+  qbittorrent:
+    container_name: qbittorrent
+    image: linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: America/New_York
+      WEBUI_PORT: 6969
+
+      # Docker Mods
+      DOCKER_MODS: "multinerd/docker-mods-qbittorrent-protonvpn-natpmp:testing"
+      # Optional WebUI login. Set BOTH host environment variables if authentication is required.
+      # Alternatively, enable "Bypass authentication for clients on localhost" in qBittorrent.
+      # QBITTORRENT_WEBUI_USERNAME: "${QBITTORRENT_WEBUI_USERNAME:-}"
+      # QBITTORRENT_WEBUI_PASSWORD: "${QBITTORRENT_WEBUI_PASSWORD:-}"
+    network_mode: service:gluetun
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./data/qbittorrent/config:/config
+      - ./data/qbittorrent/downloads:/downloads
+    depends_on:
+      gluetun:
+        condition: service_healthy

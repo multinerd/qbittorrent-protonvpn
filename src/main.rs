@@ -31,8 +31,10 @@ fn main() -> Result<()> {
 }
 
 fn update_qbittorrent(client: &mut Client, port: u16) -> Result<()> {
+    let webui_port = std::env::var("WEBUI_PORT").unwrap_or("8080".to_owned()).parse::<u16>()?;
+    let url = Url::parse(&format!("http://127.0.0.1:{}/api/v2/app/setPreferences", webui_port))?;
     client
-    .post(Url::parse("http://127.0.0.1:8080/api/v2/app/setPreferences").unwrap())
+    .post(url)
     .form(&[("json", &format!(r#"{{"listen_port":{}}}"#, port))])
     .send()?
     .error_for_status()?;
