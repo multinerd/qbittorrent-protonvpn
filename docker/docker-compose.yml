@@ -46,6 +46,7 @@ services:
       # Alternatively, enable "Bypass authentication for clients on localhost" in qBittorrent.
       # QBITTORRENT_WEBUI_USERNAME: "${QBITTORRENT_WEBUI_USERNAME:-}"
       # QBITTORRENT_WEBUI_PASSWORD: "${QBITTORRENT_WEBUI_PASSWORD:-}"
+      RUST_LOG: "warn cargo run"
     network_mode: service:gluetun
     volumes:
       - /etc/localtime:/etc/localtime:ro
